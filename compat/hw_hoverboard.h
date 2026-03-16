@@ -146,13 +146,22 @@ extern volatile uint16_t ADC_Value[];
 #define HW_SPI_PIN_MISO         12
 
 /* ========================================================================
- * UART pins (for VESC comm)
+ * UART configuration
  * ======================================================================== */
 
 #define HW_UART_TX_PORT         GPIOB
 #define HW_UART_TX_PIN          10
 #define HW_UART_RX_PORT         GPIOB
 #define HW_UART_RX_PIN          11
+#define HW_UART_DEV             SD3
+#define HW_UART_GPIO_AF         0     /* Not used on F1, AF via AFIO remap */
+
+/* ========================================================================
+ * CAN configuration
+ * ======================================================================== */
+
+#define HW_CAN_DEV              CAND1
+#define HW_CAN_GPIO_AF          GPIO_AF_CAN1
 
 /* ========================================================================
  * Gate Driver Control (no DRV83xx on hoverboard)
@@ -190,19 +199,43 @@ extern volatile uint16_t ADC_Value[];
 #define HW_LIM_TEMP_FET         -40.0f, OV_TEMPERATURE_THRESHOLD_C
 
 /* ========================================================================
+ * ICU (Input Capture) Configuration — for servo/PPM input
+ * ======================================================================== */
+
+#define HW_ICU_GPIO             GPIOB
+#define HW_ICU_PIN              6
+#define HW_ICU_TIM              TIM4
+#define HW_ICU_TIM_CLK_EN()    __HAL_RCC_TIM4_CLK_ENABLE()
+#define HW_ICU_DEV              ICUD4
+#define HW_ICU_CHANNEL          ICU_CHANNEL_1
+#define HW_ICU_GPIO_AF          0    /* Not used on F1, AF via AFIO remap */
+
+/* ========================================================================
  * Encoder / EXTI Configuration
  * ======================================================================== */
 
 #define HW_ENC_TIM              TIM4
+#define HW_ENC_TIM_AF           0     /* Not used on F1, AF via AFIO remap */
 #define HW_ENC_TIM_ISR_CH      TIM4_IRQn
 #define HW_ENC_TIM_ISR_VEC     TIM4_IRQHandler
 #define HW_ENC_EXTI_ISR_CH     EXTI15_10_IRQn
+#define HW_ENC_EXTI_CH         EXTI15_10_IRQn  /* Same as ISR_CH for compatibility */
 #define HW_ENC_EXTI_ISR_VEC    EXTI15_10_IRQHandler
 #define HW_ENC_EXTI_LINE       0x00008000U   /* EXTI Line 15 */
 #define HW_ENC_EXTI_PORTSRC    2             /* GPIOC */
 #define HW_ENC_EXTI_PINSRC     15
 #define HW_ENC_TIM_CLK_EN()    __HAL_RCC_TIM4_CLK_ENABLE()
 #define HW_ENC_EXTI_CLK_EN()   __HAL_RCC_AFIO_CLK_ENABLE()
+
+/* ========================================================================
+ * I2C Configuration (for IMU)
+ * ======================================================================== */
+
+#define HW_I2C_SDA_PORT         GPIOB
+#define HW_I2C_SDA_PIN          9
+#define HW_I2C_SCL_PORT         GPIOB
+#define HW_I2C_SCL_PIN          8
+#define HW_I2C_DEV              I2CD1
 
 /* ========================================================================
  * Hardware Setup Functions

@@ -8,6 +8,7 @@
 
 #include "stm32f1xx_hal.h"
 #include "ch.h"
+#include "spl_compat.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -310,6 +311,7 @@ static inline void usbConnectBus(USBDriver *usbp) {
 typedef struct {
     BaseSequentialStream vmt_base;
     int state;
+    EventGroupHandle_t event;
 } SerialDriver;
 
 typedef struct {
@@ -381,8 +383,18 @@ static inline int sdAsynchronousRead(SerialDriver *sdp, void *bp, size_t n) {
  * SPI Driver stubs
  * ======================================================================== */
 
-typedef struct {
-    int dummy;
+typedef enum {
+    SPI_UNINIT = 0,
+    SPI_STOP,
+    SPI_READY,
+    SPI_ACTIVE
+} spistate_t;
+
+typedef struct SPIDriver_s {
+    spistate_t state;
+    SPI_TypeDef *spi;
+    void *app_arg;
+    void (*err_cb)(struct SPIDriver_s *spip, uint32_t flags);
 } SPIDriver;
 
 typedef struct {
@@ -497,7 +509,16 @@ static inline int i2cGetErrors(I2CDriver *i2cp) {
  * ICU (Input Capture Unit) stubs
  * ======================================================================== */
 
+typedef enum {
+    ICU_UNINIT = 0,
+    ICU_STOP,
+    ICU_READY,
+    ICU_WAITING,
+    ICU_ACTIVE
+} icustate_t;
+
 typedef struct {
+    icustate_t state;
     int dummy;
 } ICUDriver;
 
@@ -507,12 +528,13 @@ typedef enum {
 } icumode_t;
 
 typedef struct {
-    uint32_t frequency;
-    void (*period_cb)(ICUDriver *);
-    void (*width_cb)(ICUDriver *);
-    void (*overflow_cb)(ICUDriver *);
     icumode_t mode;
+    uint32_t frequency;
+    void (*width_cb)(ICUDriver *);
+    void (*period_cb)(ICUDriver *);
+    void (*overflow_cb)(ICUDriver *);
     int channel;
+    uint32_t dier;
 } ICUConfig;
 
 #define ICU_CHANNEL_1   0
@@ -770,33 +792,8 @@ static inline void TIM_CCxNCmd(TIM_TypeDef *TIMx, uint16_t channel, uint16_t sta
     (void)TIMx; (void)channel; (void)state;
 }
 
-static inline void TIM_GenerateEvent(TIM_TypeDef *TIMx, uint16_t source) {
-    TIMx->EGR = source;
-}
-
-static inline void TIM_SetCompare1(TIM_TypeDef *TIMx, uint32_t val) {
-    TIMx->CCR1 = val;
-}
-
-static inline void TIM_SetCompare2(TIM_TypeDef *TIMx, uint32_t val) {
-    TIMx->CCR2 = val;
-}
-
-static inline void TIM_SetCompare3(TIM_TypeDef *TIMx, uint32_t val) {
-    TIMx->CCR3 = val;
-}
-
-static inline void TIM_SetCompare4(TIM_TypeDef *TIMx, uint32_t val) {
-    TIMx->CCR4 = val;
-}
-
-static inline uint32_t TIM_GetCapture1(TIM_TypeDef *TIMx) {
-    return TIMx->CCR1;
-}
-
-static inline uint32_t TIM_GetCapture2(TIM_TypeDef *TIMx) {
-    return TIMx->CCR2;
-}
+/* Functions like TIM_GenerateEvent, TIM_SetCompareX, TIM_GetCaptureX
+ * are defined in spl_compat.h - do not redefine here */
 
 static inline void TIM_Cmd(TIM_TypeDef *TIMx, int state) {
     if (state) TIMx->CR1 |= TIM_CR1_CEN;
@@ -858,47 +855,8 @@ static inline void TIM_ClearITPendingBit(TIM_TypeDef *TIMx, uint32_t it) {
 #endif
 
 /* ========================================================================
- * ADC Standard Peripheral Library compatibility
+ * ADC/EXTI/DMA functions are now in spl_compat.h — do not duplicate here
  * ======================================================================== */
-
-/* ADC injected channel defines */
-#ifndef ADC_InjectedChannel_1
-#define ADC_InjectedChannel_1   0x00
-#endif
-#ifndef ADC_InjectedChannel_2
-#define ADC_InjectedChannel_2   0x01
-#endif
-#ifndef ADC_InjectedChannel_3
-#define ADC_InjectedChannel_3   0x02
-#endif
-#ifndef ADC_InjectedChannel_4
-#define ADC_InjectedChannel_4   0x03
-#endif
-
-static inline uint16_t ADC_GetInjectedConversionValue(ADC_TypeDef *ADCx, uint8_t channel) {
-    switch (channel) {
-        case 0: return (uint16_t)ADCx->JDR1;
-        case 1: return (uint16_t)ADCx->JDR2;
-        case 2: return (uint16_t)ADCx->JDR3;
-        case 3: return (uint16_t)ADCx->JDR4;
-        default: return 0;
-    }
-}
-
-static inline void ADC_Cmd(ADC_TypeDef *ADCx, int state) {
-    if (state) ADCx->CR2 |= ADC_CR2_ADON;
-    else ADCx->CR2 &= ~ADC_CR2_ADON;
-}
-
-static inline void ADC_ITConfig(ADC_TypeDef *ADCx, uint32_t it, int state) {
-    if (state) ADCx->CR1 |= it;
-    else ADCx->CR1 &= ~it;
-}
-
-/* ADC IT defines */
-#ifndef ADC_IT_JEOC
-#define ADC_IT_JEOC     ADC_CR1_JEOCIE
-#endif
 
 /* ========================================================================
  * EXTI Standard Peripheral Library compatibility
@@ -936,6 +894,74 @@ static inline void EXTI_ClearITPendingBit(uint32_t line) {
     EXTI->PR = line;
 }
 
+/* EXTI Init structure (SPL-style) */
+typedef struct {
+    uint32_t EXTI_Line;
+    uint32_t EXTI_Mode;
+    uint32_t EXTI_Trigger;
+    uint32_t EXTI_LineCmd;
+} EXTI_InitTypeDef;
+
+/* EXTI Mode */
+#ifndef EXTI_Mode_Interrupt
+#define EXTI_Mode_Interrupt     0x00
+#define EXTI_Mode_Event         0x01
+#endif
+
+/* EXTI Trigger */
+#ifndef EXTI_Trigger_Rising
+#define EXTI_Trigger_Rising             0x00
+#define EXTI_Trigger_Falling            0x01
+#define EXTI_Trigger_Rising_Falling     0x02
+#endif
+
+static inline void EXTI_Init(EXTI_InitTypeDef *init) {
+    if (init->EXTI_LineCmd) {
+        if (init->EXTI_Mode == EXTI_Mode_Interrupt)
+            EXTI->IMR |= init->EXTI_Line;
+        if (init->EXTI_Trigger == EXTI_Trigger_Rising || init->EXTI_Trigger == EXTI_Trigger_Rising_Falling)
+            EXTI->RTSR |= init->EXTI_Line;
+        if (init->EXTI_Trigger == EXTI_Trigger_Falling || init->EXTI_Trigger == EXTI_Trigger_Rising_Falling)
+            EXTI->FTSR |= init->EXTI_Line;
+    } else {
+        EXTI->IMR &= ~init->EXTI_Line;
+        EXTI->RTSR &= ~init->EXTI_Line;
+        EXTI->FTSR &= ~init->EXTI_Line;
+    }
+}
+
+/* EXTI port source defines */
+#ifndef EXTI_PortSourceGPIOA
+#define EXTI_PortSourceGPIOA    0x00
+#define EXTI_PortSourceGPIOB    0x01
+#define EXTI_PortSourceGPIOC    0x02
+#define EXTI_PortSourceGPIOD    0x03
+#endif
+
+#ifndef EXTI_PinSource0
+#define EXTI_PinSource0     0
+#define EXTI_PinSource1     1
+#define EXTI_PinSource2     2
+#define EXTI_PinSource3     3
+#define EXTI_PinSource4     4
+#define EXTI_PinSource5     5
+#define EXTI_PinSource6     6
+#define EXTI_PinSource7     7
+#define EXTI_PinSource8     8
+#define EXTI_PinSource9     9
+#define EXTI_PinSource10    10
+#define EXTI_PinSource11    11
+#define EXTI_PinSource12    12
+#define EXTI_PinSource13    13
+#define EXTI_PinSource14    14
+#define EXTI_PinSource15    15
+#endif
+
+/* RCC_APB2Periph_SYSCFG - F4 has SYSCFG, F1 uses AFIO */
+#ifndef RCC_APB2Periph_SYSCFG
+#define RCC_APB2Periph_SYSCFG   0x00000001U  /* Maps to AFIO enable on F1 */
+#endif
+
 /* ========================================================================
  * DMA Standard Peripheral Library compatibility
  * ======================================================================== */
@@ -966,6 +992,7 @@ static inline void NVIC_DisableIRQ_compat(IRQn_Type irq) {
 
 /* ========================================================================
  * FLASH Standard Peripheral Library compatibility
+ * STM32F4-specific flags mapped to STM32F1 equivalents
  * ======================================================================== */
 
 /* Flash status enum — use unique names to avoid HAL conflicts */
@@ -976,6 +1003,66 @@ typedef enum {
     FLASH_SPL_COMPLETE,
     FLASH_SPL_TIMEOUT
 } FLASH_Status;
+
+/* FLASH_COMPLETE used by VESC code (SPL naming) */
+#ifndef FLASH_COMPLETE
+#define FLASH_COMPLETE          FLASH_SPL_COMPLETE
+#endif
+
+/* STM32F4 flash flags → map to F1 equivalents */
+#ifndef FLASH_FLAG_OPERR
+#define FLASH_FLAG_OPERR        FLASH_FLAG_PGERR
+#endif
+#ifndef FLASH_FLAG_PGAERR
+#define FLASH_FLAG_PGAERR       FLASH_FLAG_PGERR
+#endif
+#ifndef FLASH_FLAG_PGPERR
+#define FLASH_FLAG_PGPERR       FLASH_FLAG_PGERR
+#endif
+#ifndef FLASH_FLAG_PGSERR
+#define FLASH_FLAG_PGSERR       FLASH_FLAG_PGERR
+#endif
+
+/* STM32F4 flash sector defines → map to F1 page-based flash */
+#define FLASH_Sector_0          0
+#define FLASH_Sector_1          1
+#define FLASH_Sector_2          2
+#define FLASH_Sector_3          3
+#define FLASH_Sector_4          4
+#define FLASH_Sector_5          5
+#define FLASH_Sector_6          6
+#define FLASH_Sector_7          7
+#define FLASH_Sector_8          8
+#define FLASH_Sector_9          9
+#define FLASH_Sector_10         10
+#define FLASH_Sector_11         11
+#define FLASH_SECTORS           12
+
+/* STM32F4 flash functions → stubs for F1 */
+static inline FLASH_Status FLASH_EraseSector(uint32_t sector, uint8_t voltage) {
+    (void)sector; (void)voltage;
+    return FLASH_SPL_COMPLETE;
+}
+
+static inline FLASH_Status FLASH_ProgramWord(uint32_t addr, uint32_t data) {
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, data);
+    return FLASH_SPL_COMPLETE;
+}
+
+static inline FLASH_Status FLASH_ProgramHalfWord(uint32_t addr, uint16_t data) {
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr, data);
+    return FLASH_SPL_COMPLETE;
+}
+
+static inline void FLASH_ClearFlag(uint32_t flag) {
+    __HAL_FLASH_CLEAR_FLAG(flag);
+}
+
+/* VoltageRange defines (F4 specific, not used on F1 but needed for compilation) */
+#define VoltageRange_1          0x00
+#define VoltageRange_2          0x01
+#define VoltageRange_3          0x02
+#define VoltageRange_4          0x03
 
 /* Flash latency */
 #ifndef FLASH_Latency_0
@@ -994,6 +1081,30 @@ typedef enum {
 
 #ifndef IWDG_WriteAccess_Enable
 #define IWDG_WriteAccess_Enable     0x5555
+#endif
+
+#ifndef IWDG_Prescaler_4
+#define IWDG_Prescaler_4            0x00
+#endif
+
+#ifndef IWDG_Prescaler_8
+#define IWDG_Prescaler_8            0x01
+#endif
+
+#ifndef IWDG_Prescaler_16
+#define IWDG_Prescaler_16           0x02
+#endif
+
+#ifndef IWDG_Prescaler_32
+#define IWDG_Prescaler_32           0x03
+#endif
+
+#ifndef IWDG_Prescaler_64
+#define IWDG_Prescaler_64           0x04
+#endif
+
+#ifndef IWDG_Prescaler_128
+#define IWDG_Prescaler_128          0x05
 #endif
 
 #ifndef IWDG_Prescaler_256
@@ -1044,6 +1155,45 @@ static inline void IWDG_Enable(void) {
 
 /* System clock extern */
 extern uint32_t SystemCoreClock;
+
+/* ========================================================================
+ * I2C address type
+ * ======================================================================== */
+typedef uint8_t i2caddr_t;
+
+/* ========================================================================
+ * Channel notification flags (serial/stream)
+ * ======================================================================== */
+#ifndef CHN_INPUT_AVAILABLE
+#define CHN_INPUT_AVAILABLE     0x01
+#define CHN_OUTPUT_EMPTY        0x02
+#define CHN_CONNECTED           0x04
+#define CHN_DISCONNECTED        0x08
+#define CHN_TRANSMISSION_END    0x10
+#endif
+
+/* chEvtRegisterMaskWithFlags: Register event source with flags */
+#ifndef COMPAT_EVENT_LISTENER_DEFINED
+#define COMPAT_EVENT_LISTENER_DEFINED
+typedef struct {
+    int _evt_dummy;
+} event_listener_t;
+#endif
+
+#ifndef COMPAT_EVT_REGISTER_DEFINED
+#define COMPAT_EVT_REGISTER_DEFINED
+static inline void chEvtRegisterMaskWithFlags(EventGroupHandle_t *source,
+                                               event_listener_t *el,
+                                               eventmask_t events,
+                                               uint32_t flags) {
+    (void)source; (void)el; (void)events; (void)flags;
+}
+
+static inline eventmask_t chEvtWaitAnyTimeout(eventmask_t events, sysinterval_t timeout) {
+    (void)events; (void)timeout;
+    return 0;
+}
+#endif
 
 #ifdef __cplusplus
 }

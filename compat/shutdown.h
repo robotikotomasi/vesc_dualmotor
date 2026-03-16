@@ -21,7 +21,7 @@ void shutdown_init(void);
 void shutdown_reset_timer(void);
 bool shutdown_button_pressed(void);
 float shutdown_get_inactivity_time(void);
-void do_shutdown(void);
+void do_shutdown(bool send_notification);
 
 #ifdef __cplusplus
 }

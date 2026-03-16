@@ -16,4 +16,9 @@ typedef uint32_t eventmask_t;
 typedef uint32_t eventflags_t;
 typedef int32_t  msg_t;
 
+/* ChibiOS ST frequency (tick rate) */
+#ifndef CH_CFG_ST_FREQUENCY
+#define CH_CFG_ST_FREQUENCY  1000
+#endif
+
 #endif /* CHTYPES_H_COMPAT */

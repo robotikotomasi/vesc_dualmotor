@@ -11,6 +11,8 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "chtypes.h"
+
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
@@ -25,12 +27,30 @@ extern "C" {
  * Types
  * ======================================================================== */
 
+/* stkalign_t: stack alignment type (ChibiOS compat) */
+typedef uint32_t stkalign_t;
+
 typedef struct ch_thread {
     osThreadId_t id;
     int motor_selected;
     const char *name;
+    const char *p_name;   /* ChibiOS alias */
     EventGroupHandle_t events;
+    int p_state;
+    int p_prio;
+    int p_refs;
+    uint32_t p_time;
+    stkalign_t *p_stklimit;   /* Stack limit pointer for stack checking */
+    struct {
+        uint32_t r13;  /* Saved stack pointer */
+    } p_ctx;
 } thread_t;
+
+/* port_intctx: Architecture-specific interrupt context */
+struct port_intctx {
+    uint32_t r4, r5, r6, r7, r8, r9, r10, r11;
+    uint32_t lr;
+};
 
 typedef struct {
     SemaphoreHandle_t sem;
@@ -49,9 +69,12 @@ typedef uint32_t eventflags_t;
 typedef uint32_t systime_t;
 typedef uint32_t sysinterval_t;
 
+#ifndef COMPAT_EVENT_LISTENER_DEFINED
+#define COMPAT_EVENT_LISTENER_DEFINED
 typedef struct {
     void *dummy;
 } event_listener_t;
+#endif
 
 typedef struct {
     void *dummy;
@@ -105,6 +128,7 @@ typedef BaseSequentialStream BaseChannel;
  * ======================================================================== */
 
 #define THD_WORKING_AREA(name, size)  uint8_t name[(size) + 256]
+#define THD_WORKING_AREA_SIZE(n)     ((n) + 256)
 #define THD_FUNCTION(name, arg)       void name(void *arg)
 
 /* ========================================================================
@@ -329,11 +353,19 @@ static inline eventmask_t chEvtWaitAny(eventmask_t events) {
     return 0;
 }
 
+#ifndef COMPAT_EVT_REGISTER_DEFINED
+#define COMPAT_EVT_REGISTER_DEFINED
 static inline eventmask_t chEvtWaitAnyTimeout(eventmask_t events, sysinterval_t timeout) {
     (void)events;
     osDelay(timeout > 0 ? timeout : 1);
     return 0;
 }
+
+static inline void chEvtRegisterMaskWithFlags(event_source_t *esp, event_listener_t *elp,
+                                               eventmask_t events, eventflags_t flags) {
+    (void)esp; (void)elp; (void)events; (void)flags;
+}
+#endif
 
 static inline eventmask_t chEvtGetAndClearEvents(eventmask_t events) {
     (void)events;
@@ -342,11 +374,6 @@ static inline eventmask_t chEvtGetAndClearEvents(eventmask_t events) {
 
 static inline void chEvtRegister(event_source_t *esp, event_listener_t *elp, int event) {
     (void)esp; (void)elp; (void)event;
-}
-
-static inline void chEvtRegisterMaskWithFlags(event_source_t *esp, event_listener_t *elp,
-                                               eventmask_t events, eventflags_t flags) {
-    (void)esp; (void)elp; (void)events; (void)flags;
 }
 
 static inline void chEvtUnregister(event_source_t *esp, event_listener_t *elp) {
@@ -425,13 +452,21 @@ static inline size_t chCoreGetStatusX(void) {
     return xPortGetFreeHeapSize();
 }
 
-static inline size_t chHeapStatus(void *heap, size_t *total, size_t *largest) {
+static inline size_t chHeapStatus_3(void *heap, size_t *total, size_t *largest) {
     (void)heap;
     size_t free_heap = xPortGetFreeHeapSize();
     if (total)   *total = free_heap;
     if (largest) *largest = free_heap;
     return 0;
 }
+
+static inline size_t chHeapStatus_2(void *heap, size_t *total) {
+    return chHeapStatus_3(heap, total, NULL);
+}
+
+/* Support both 2-arg and 3-arg chHeapStatus calls */
+#define GET_HEAP_MACRO(_1, _2, _3, NAME, ...) NAME
+#define chHeapStatus(...) GET_HEAP_MACRO(__VA_ARGS__, chHeapStatus_3, chHeapStatus_2)(__VA_ARGS__)
 
 /* ========================================================================
  * Mailbox functions (stubs)
@@ -537,6 +572,17 @@ static inline void chMsgRelease(thread_t *tp, int msg) {
 #ifndef CH_DBG_SYSTEM_STATE_CHECK
 #define CH_DBG_SYSTEM_STATE_CHECK   0
 #endif
+
+#ifndef CH_CFG_ST_FREQUENCY
+#define CH_CFG_ST_FREQUENCY         1000
+#endif
+
+/* Thread state names for debug display */
+#define CH_STATE_NAMES \
+    "READY", "CURRENT", "WTSTART", "SUSPENDED", "QUEUED", \
+    "WTSEM", "WTMTX", "WTCOND", "SLEEPING", "WTEXIT", \
+    "WTOREVT", "WTANDEVT", "SNDMSGQ", "SNDMSG", "WTMSG", \
+    "FINAL"
 
 /* chprintf support - map to empty */
 #define chprintf(stream, fmt, ...)   do {} while(0)

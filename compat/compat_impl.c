@@ -68,7 +68,8 @@ float shutdown_get_inactivity_time(void) {
     return 0.0f;
 }
 
-void do_shutdown(void) {
+void do_shutdown(bool send_notification) {
+    (void)send_notification;
 }
 
 /* ========================================================================
