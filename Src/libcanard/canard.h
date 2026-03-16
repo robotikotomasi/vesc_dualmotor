@@ -72,7 +72,7 @@ extern "C" {
 #ifndef CANARD_STATIC_ASSERT
 # if (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) ||\
      (defined(__cplusplus) && (__cplusplus >= 201103L))
-#  define CANARD_STATIC_ASSERT(...) static_assert(__VA_ARGS__)
+#  define CANARD_STATIC_ASSERT(...) _Static_assert(__VA_ARGS__)
 # else
 #  define CANARD_STATIC_ASSERT(x, ...) typedef char CANARD_GLUE(_static_assertion_, __LINE__)[(x) ? 1 : -1]
 # endif

@@ -240,6 +240,7 @@ C_INCLUDES = \
 -ISrc/util/lzo \
 -ISrc/applications \
 -ISrc/libcanard \
+-ISrc/libcanard/dsdl \
 -ISrc/libcanard/dsdl/vesc \
 -ISrc/qmlui \
 -ISrc/qmlui/app \
