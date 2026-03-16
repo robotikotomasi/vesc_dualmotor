@@ -1361,7 +1361,7 @@ static THD_FUNCTION(canard_thread, arg) {
 		while ((rxmsg = comm_can_get_rx_frame(1)) != 0) {
 			CanardCANFrame rx_frame;
 
-			if (rxmsg->IDE == CAN_IDE_EXT) {
+			if (rxmsg->IDE == CAN_ID_EXT) {
 				rx_frame.id = rxmsg->EID | CANARD_CAN_FRAME_EFF;
 			} else {
 				rx_frame.id = rxmsg->SID;
@@ -1382,7 +1382,7 @@ static THD_FUNCTION(canard_thread, arg) {
 		while ((rxmsg = comm_can_get_rx_frame(2)) != 0) {
 			CanardCANFrame rx_frame;
 
-			if (rxmsg->IDE == CAN_IDE_EXT) {
+			if (rxmsg->IDE == CAN_ID_EXT) {
 				rx_frame.id = rxmsg->EID | CANARD_CAN_FRAME_EFF;
 			} else {
 				rx_frame.id = rxmsg->SID;

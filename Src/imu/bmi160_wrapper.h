@@ -22,6 +22,7 @@
 
 #include "ch.h"
 #include "hal.h"
+#include "datatypes.h"
 
 #include <stdint.h>
 #include <stdbool.h>

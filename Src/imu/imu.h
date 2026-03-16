@@ -22,6 +22,7 @@
 
 #include "ch.h"
 #include "hal.h"
+#include "datatypes.h"
 #include "i2c_bb.h"
 #include "spi_bb.h"
 
